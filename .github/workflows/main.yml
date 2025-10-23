@@ -1,3 +1,6 @@
+# This workflow builds a local image, scans it with your custom action,
+# and only pushes to GAR if the scan is successful.
+
 name: Build, Scan, and Push Docker Image
 
 on:
@@ -7,13 +10,13 @@ on:
 
 # Set environment variables for the entire workflow
 env:
-  IMAGE_NAME: vulnerable-app
+  IMAGE_NAME: vulnerable-app # The local name for the image
 
 jobs:
   build-scan-push:
     runs-on: ubuntu-latest
     
-    # Add permissions for GitHub to authenticate with Google Cloud
+    # Permissions are required for the custom action to use WIF
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -22,51 +25,49 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 1. AUTHENTICATION
-      # Authenticate to Google Cloud using Workload Identity Federation
-      - name: Authenticate to Google Cloud
-        id: auth
-        uses: 'google-github-actions/auth@v2'
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-      # 2. DOCKER BUILD
-      # We build the image first, so we can scan it before pushing.
+      # 1. DOCKER BUILD
+      # Build the image with a simple local name
       - name: Build Docker image
         run: |
+          echo "Building local image: $IMAGE_NAME:${{ github.sha }}"
           docker build -t $IMAGE_NAME:${{ github.sha }} -t $IMAGE_NAME:latest .
 
-      # 3. VULNERABILITY SCAN (The Demo Step)
-      # Run Trivy scanner on the locally built image.
-      - name: Scan image with Trivy
-        uses: aquasecurity/trivy-action@master
+      # 2. VULNERABILITY SCAN (The Demo Step)
+      # This step runs your custom action.
+      # It scans the local image AND authenticates to GCP for the next step.
+      - name: Scan image with SCC artifactguard Scanner
+        uses: ./.github/actions/scc-artifactguard-scanner 
         with:
-          # Scan the image we just built
-          image-ref: '${{ env.IMAGE_NAME }}:latest'
-          format: 'table'
-          
-          # '0' means the workflow will PASS even if vulnerabilities are found.
-          # Set to '1' to FAIL the build if vulnerabilities are detected.
-          exit-code: '0' 
-          
-          # Only report on Critical and High severity issues
-          severity: 'CRITICAL,HIGH'
+          # --- Image to Scan (use local name) ---
+          IMAGE_NAME_TO_SCAN: ${{ env.IMAGE_NAME }}
+          IMAGE_TAG: ${{ github.sha }} # Scan the specific commit SHA tag
 
-      # 4. DOCKER PUSH
-      # This step only runs if the scan (and all previous steps) succeed.
-      - name: Configure Docker for GAR
-        run: gcloud auth configure-docker ${{ secrets.GAR_LOCATION }}-docker.pkg.dev
+          # --- Scanner Configuration (from Secrets) ---
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          ORGANIZATION_ID: ${{ secrets.ORGANIZATION_ID }}
+          CONNECTOR_ID: ${{ secrets.CONNECTOR_ID }}
+          SCANNER_IMAGE: ${{ secrets.SCANNER_IMAGE }}
 
+          # --- Auth Configuration (from Secrets) ---
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          
+          # --- Behavior ---
+          IGNORE_SERVER_ERRORS: 'false'
+
+      # 3. DOCKER PUSH
+      # This step only runs if the scan passed.
+      # The custom scanner action already ran `gcloud auth configure-docker`.
       - name: Push Docker image to Artifact Registry
         run: |
-          # Define the full image path
+          # Define the full image path using secrets
           GAR_IMAGE_PATH="${{ secrets.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GAR_REPOSITORY }}/${{ env.IMAGE_NAME }}"
           
-          # Push the 'latest' tag
+          echo "Tagging local image for GAR: $GAR_IMAGE_PATH"
           docker tag $IMAGE_NAME:latest $GAR_IMAGE_PATH:latest
-          docker push $GAR_IMAGE_PATH:latest
-          
-          # Push the unique 'sha' tag for versioning
           docker tag $IMAGE_NAME:${{ github.sha }} $GAR_IMAGE_PATH:${{ github.sha }}
+          
+          echo "Pushing images to GAR..."
+          docker push $GAR_IMAGE_PATH:latest
           docker push $GAR_IMAGE_PATH:${{ github.sha }}
+
