@@ -81,8 +81,8 @@ runs:
         # Note: We now use the env vars passed from the action.yml
         docker run --rm \
           -v /var/run/docker.sock:/var/run/docker.sock \
-          -v "${CREDENTIALS_FILE_PATH}":/gcp-creds.json \
-          -e GOOGLE_APPLICATION_CREDENTIALS=/gcp-creds.json \
+          -v ${{ steps.auth.outputs.credentials_file_path }}:/tmp/scc-key.json \
+          -e GCLOUD_KEY_PATH=/tmp/scc-key.json \
           -e GCP_PROJECT_ID="${INPUT_GCP_PROJECT_ID}" \
           -e ORGANIZATION_ID="${INPUT_ORGANIZATION_ID}" \
           -e IMAGE_NAME="${INPUT_IMAGE_NAME_TO_SCAN}" \
@@ -119,8 +119,6 @@ runs:
         INPUT_CONNECTOR_ID: ${{ inputs.CONNECTOR_ID }}
         INPUT_SCANNER_IMAGE: ${{ inputs.SCANNER_IMAGE }}
         INPUT_IGNORE_SERVER_ERRORS: ${{ inputs.IGNORE_SERVER_ERRORS }}
-        # Pass the path to the generated credentials file
-        CREDENTIALS_FILE_PATH: ${{ steps.auth.outputs.credentials_file_path }}
         # Pass GitHub-specific variables
         GITHUB_WORKFLOW_NAME: ${{ github.workflow }}
         GITHUB_RUN_NUMBER: ${{ github.run_number }}
