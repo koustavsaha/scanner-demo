@@ -30,7 +30,7 @@ jobs:
       - name: Build Docker image
         run: |
           echo "Building local image: $IMAGE_NAME:${{ github.sha }}"
-          docker build -t $IMAGE_NAME:${{ github.sha }} -t $IMAGE_NAME:latest .
+          docker build  -t $IMAGE_NAME:latest .
 
       # 2. VULNERABILITY SCAN (The Demo Step)
       # This step runs your custom action.
@@ -40,7 +40,7 @@ jobs:
         with:
           # --- Image to Scan (use local name) ---
           IMAGE_NAME_TO_SCAN: ${{ env.IMAGE_NAME }}
-          IMAGE_TAG: ${{ github.sha }} # Scan the specific commit SHA tag
+          IMAGE_TAG: 'latest' # Scan the specific commit SHA tag
 
           # --- Scanner Configuration (from Secrets) ---
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
