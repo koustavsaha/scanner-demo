@@ -33,7 +33,7 @@ jobs:
           docker build  -t $IMAGE_NAME:latest .
 
       # 2. VULNERABILITY SCAN (The Demo Step)
-      # This step runs your cushtom action.
+      # This step runs your cushftom action.
       # It scans the local image AND authenticates to GCP for the next step.
       - name: Scan image with SCC artifactguard Scanner
         uses: ./.github/actions/scc-artifactguard-scanner 
