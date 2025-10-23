@@ -43,7 +43,7 @@ permissions:
   id-token: 'write' # Required for WIF authentication
 
 runs:
-  using: "composite" # This action is a composite of several shell steps
+  using: "composite" # This actison is a composite of several shell steps
   steps:
     # Step 1: Authenticate and create credential file for the scanner
     - name: 'Authenticate to Google Cloud'
