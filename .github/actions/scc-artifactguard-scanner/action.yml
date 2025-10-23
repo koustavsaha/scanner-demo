@@ -65,7 +65,7 @@ runs:
         gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
         gcloud auth configure-docker gcr.io --quiet
 
-    # Step 4: Run the scan
+    # Step 4: Run the scans
     # We pass all inputs as environment vddariables to the shell script
     - name: 'Run Image Analysis Scan'
       shell: bash
