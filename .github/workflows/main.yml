@@ -1,0 +1,72 @@
+name: Build, Scan, and Push Docker Image
+
+on:
+  push:
+    branches: [ "main" ] # Triggers on push to the main branch
+  workflow_dispatch: # Allows manual triggering
+
+# Set environment variables for the entire workflow
+env:
+  IMAGE_NAME: vulnerable-app
+
+jobs:
+  build-scan-push:
+    runs-on: ubuntu-latest
+    
+    # Add permissions for GitHub to authenticate with Google Cloud
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 1. AUTHENTICATION
+      # Authenticate to Google Cloud using Workload Identity Federation
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: 'google-github-actions/auth@v2'
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      # 2. DOCKER BUILD
+      # We build the image first, so we can scan it before pushing.
+      - name: Build Docker image
+        run: |
+          docker build -t $IMAGE_NAME:${{ github.sha }} -t $IMAGE_NAME:latest .
+
+      # 3. VULNERABILITY SCAN (The Demo Step)
+      # Run Trivy scanner on the locally built image.
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          # Scan the image we just built
+          image-ref: '${{ env.IMAGE_NAME }}:latest'
+          format: 'table'
+          
+          # '0' means the workflow will PASS even if vulnerabilities are found.
+          # Set to '1' to FAIL the build if vulnerabilities are detected.
+          exit-code: '0' 
+          
+          # Only report on Critical and High severity issues
+          severity: 'CRITICAL,HIGH'
+
+      # 4. DOCKER PUSH
+      # This step only runs if the scan (and all previous steps) succeed.
+      - name: Configure Docker for GAR
+        run: gcloud auth configure-docker ${{ secrets.GAR_LOCATION }}-docker.pkg.dev
+
+      - name: Push Docker image to Artifact Registry
+        run: |
+          # Define the full image path
+          GAR_IMAGE_PATH="${{ secrets.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GAR_REPOSITORY }}/${{ env.IMAGE_NAME }}"
+          
+          # Push the 'latest' tag
+          docker tag $IMAGE_NAME:latest $GAR_IMAGE_PATH:latest
+          docker push $GAR_IMAGE_PATH:latest
+          
+          # Push the unique 'sha' tag for versioning
+          docker tag $IMAGE_NAME:${{ github.sha }} $GAR_IMAGE_PATH:${{ github.sha }}
+          docker push $GAR_IMAGE_PATH:${{ github.sha }}
