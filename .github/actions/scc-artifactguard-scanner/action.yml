@@ -88,8 +88,7 @@ runs:
           -e IMAGE_NAME="${INPUT_IMAGE_NAME_TO_SCAN}" \
           -e IMAGE_TAG="${INPUT_IMAGE_TAG}" \
           -e CONNECTOR_ID="${INPUT_CONNECTOR_ID}" \
-          -e BUILD_TAG="${GITHUB_WORKFLOW_NAME}" \
-          -e BUILD_ID="${GITHUB_RUN_NUMBER}" \
+          -e RUN_ID="${{ github.workflow }}" \
           "${INPUT_SCANNER_IMAGE}" \
           || exit_code=$?
 
