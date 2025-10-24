@@ -1,7 +1,7 @@
 {
   "name": "vulnerable-app",
   "version": "1.0.0",
-  "description": "A simple Node.js app with known vulnerabilities for demo.",
+  "description": "A simple Node.js appliation with known vulnerabilities for demo.",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
