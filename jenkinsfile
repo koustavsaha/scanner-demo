@@ -1,0 +1,169 @@
+/**
+ * Jenkins Declarative Pipeline for the Vulnerable App Demo
+ *
+ * This pipeline replicates the "Build -> Scan -> Push" logic from the
+ * GitHub Actions and Cloud Build demos.
+ *
+ * It is designed to be run from a Jenkins controller (e.g., in Docker)
+ * that has access to its host's (the VM's) Docker daemon.
+ */
+
+// ---------------------------------
+// REUSABLE SCANNER FUNCTION
+// ---------------------------------
+/**
+ * Modular function to run the custom scanner.
+ * This is the Jenkins equivalent of the GitHub reusable action.
+ *
+ * @param args A Map containing:
+ * - keyFilePath: (String) Path to the GCP service account key file.
+ * - imageName: (String) The full name of the image to scan (e.g., "us-central1-docker...")
+ * - imageTag: (String) The tag of the image to scan (e.g., the commit SHA)
+ */
+def runCustomScan(Map args) {
+    script {
+        echo "📦 Running container from scanner image..."
+        
+        // This try/catch block replicates the exit-code logic from your other pipelines
+        try {
+            // We mount the key file and Docker socket directly into the scanner container.
+            // The 'sh' step will throw an exception if the docker run command
+            // exits with a non-zero code.
+            sh """
+            docker run --rm \
+              -v ${args.keyFilePath}:/gcp-creds.json \
+              -v /var/run/docker.sock:/var/run/docker.sock \
+              -e GOOGLE_APPLICATION_CREDENTIALS=/gcp-creds.json \
+              -e GCP_PROJECT_ID="${env.GCP_PROJECT_ID}" \
+              -e ORGANIZATION_ID="${env.ORGANIZATION_ID}" \
+              -e IMAGE_NAME="${args.imageName}" \
+              -e IMAGE_TAG="${args.imageTag}" \
+              -e CONNECTOR_ID="${env.CONNECTOR_ID}" \
+              -e BUILD_TAG="jenkins" \
+              -e BUILD_ID="${env.BUILD_NUMBER}" \
+              "${env.SCANNER_IMAGE}"
+            """
+            
+            // If sh succeeds (exit code 0):
+            echo "✅ Evaluation succeeded: Conformant image."
+
+        } catch (Exception e) {
+            // 'sh' failed, so the scanner returned a non-zero exit code.
+            // We parse the exit code from the error message.
+            def matcher = (e.getMessage() =~ /script returned exit code (\d+)/)
+            def exitCode = matcher.find() ? matcher.group(1) : "unknown"
+
+            echo "Docker run finished with non-zero exit code: $exitCode"
+
+            if (exitCode == "1") {
+                // Exit code 1: Vulnerabilities found. Fail the build.
+                error("❌ Scan failed: Non-conformant image (vulnerabilities found).")
+            } else {
+                // Any other non-zero exit code: Server/internal error.
+                if (env.IGNORE_SERVER_ERRORS == 'true') {
+                    echo "⚠️ Server/internal error occurred (Code: $exitCode), but IGNORE_SERVER_ERRORS=true. Proceeding."
+                } else {
+                    error("❌ Server/internal error occurred (Code: $exitCode) during evaluation. Set IGNORE_SERVER_ERRORS=true to override.")
+                }
+            }
+        }
+    }
+}
+
+
+// ---------------------------------
+// MAIN PIPELINE DEFINITION
+// ---------------------------------
+pipeline {
+    // Run on any available agent. For this demo, this will be the
+    // main Jenkins controller.
+    agent any
+
+    // This checks for new commits every 5 minutes (as a fallback)
+    // The primary trigger will be the GitHub webhook.
+    triggers {
+        pollSCM('H/5 * * * *')
+    }
+
+    // Define all environment variables, similar to cloudbuild.yaml
+    environment {
+        GCP_PROJECT_ID         = 'cispoc'
+        IMAGE_NAME             = 'vulnerable-app'
+        ORGANIZATION_ID        = '714470867684'
+        CONNECTOR_ID           = 'organizations/714470867684/locations/global/connectors/privatepreviewdemo'
+        SCANNER_IMAGE          = 'us-central1-docker.pkg.dev/ci-plugin/ci-images/scc-artifactguard-scan-image:latest'
+        IGNORE_SERVER_ERRORS   = 'false'
+        
+        // Set these to your specific Artifact Registry details
+        GAR_LOCATION           = 'us-central1'
+        GAR_REPOSITORY         = 'vulnerable-apps'
+        
+        // Derived variables, built from the ones above
+        GAR_IMAGE_PATH         = "${GAR_LOCATION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${IMAGE_NAME}"
+        
+        // This will be set in the 'Checkout' stage
+        COMMIT_SHA             = '' 
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                // Check out the code
+                checkout scm
+                
+                // Get the full commit SHA
+                script {
+                    env.COMMIT_SHA = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                }
+            }
+        }
+
+        stage('Build') {
+            steps {
+                echo "Building local image: ${env.GAR_IMAGE_PATH}:${env.COMMIT_SHA}"
+                sh "docker build -t ${env.GAR_IMAGE_PATH}:${env.COMMIT_SHA} ."
+            }
+        }
+
+        stage('Scan') {
+            steps {
+                // Use the Jenkins "Credentials Binding" plugin to securely access
+                // the service account key we will create.
+                withCredentials([file(credentialsId: 'gcp-sa-key', variable: 'GCP_KEY_FILE')]) {
+                    
+                    echo "Scanning image: ${env.GAR_IMAGE_PATH}:${env.COMMIT_SHA}"
+                    
+                    // Call our modular function
+                    runCustomScan(
+                        keyFilePath: GCP_KEY_FILE,
+                        imageName: env.GAR_IMAGE_PATH,
+                        imageTag: env.COMMIT_SHA
+                    )
+                }
+            }
+        }
+
+        stage('Push') {
+            // This stage only runs if 'Scan' succeeds
+            steps {
+                echo "Scan passed. Pushing image to ${env.GAR_IMAGE_PATH}"
+                
+                // Authenticate the Docker CLI using the same service account key
+                withCredentials([file(credentialsId: 'gcp-sa-key', variable: 'GCP_KEY_FILE')]) {
+                    
+                    // 1. Authenticate Docker directly with the service account key.
+                    // This avoids needing the gcloud CLI in the Jenkins container.
+                    sh "cat ${GCP_KEY_FILE} | docker login -u _json_key --password-stdin https://${env.GAR_LOCATION}-docker.pkg.dev"
+                    
+                    // 2. Push the commit-specific tag
+                    sh "docker push ${env.GAR_IMAGE_PATH}:${env.COMMIT_SHA}"
+                    
+                    // 3. Tag and push the 'latest' tag
+                    sh "docker tag ${env.GAR_IMAGE_PATH}:${env.COMMIT_SHA} ${env.GAR_IMAGE_PATH}:latest"
+                    sh "docker push ${env.GAR_IMAGE_PATH}:latest"
+                }
+            }
+        }
+    }
+}
+
