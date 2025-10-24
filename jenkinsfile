@@ -126,7 +126,7 @@ pipeline {
 
         stage('Scan') {
             steps {
-                // Use the Jenkins "Credentials Binding" plugin to securely access
+                // Use the Jenkins "Credentials Binding" plugin to securely accesss
                 // the service account key we will create.
                 withCredentials([file(credentialsId: 'gcp-sa-key', variable: 'GCP_KEY_FILE')]) {
                     
