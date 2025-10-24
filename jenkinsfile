@@ -75,14 +75,19 @@ def runCustomScan(Map args) {
 // MAIN PIPELINE DEFINITION
 // ---------------------------------
 pipeline {
-    // Run on any available agent. For this demo, this will be the
-    // main Jenkins controller.
-    agent any
+    // UPDATED: Tell Jenkins to run all steps inside the 'docker:latest' container.
+    // This container has both 'docker' and 'git' CLIs installed.
+    agent {
+        docker {
+            image 'docker:latest'
+            // We still need to give this *new* container access to the host's Docker socket
+            args '-v /var/run/docker.sock:/var/run/docker.sock'
+        }
+    }
 
-    // This checks for new commits every 5 minutes (as a fallback)
-    // The primary trigger will be the GitHub webhook.
+    // Use the GitHub hook trigger for GITScm polling
     triggers {
-        pollSCM('H/5 * * * *')
+        githubPush()
     }
 
     // Define all environment variables, similar to cloudbuild.yaml
@@ -91,8 +96,9 @@ pipeline {
         IMAGE_NAME             = 'vulnerable-app-jenkins'
         ORGANIZATION_ID        = '714470867684'
         CONNECTOR_ID           = 'organizations/714470867684/locations/global/connectors/privatepreviewdemo'
-        SCANNER_IMAGE          = 'gcr.io/ci-plugin/updated-ci-scanning-multistage-build:latest'
+        SCANNER_IMAGE          = 'us-central1-docker.pkg.dev/ci-plugin/ci-images/scc-artifactguard-scan-image:latest'
         IGNORE_SERVER_ERRORS   = 'false'
+        
         // Set these to your specific Artifact Registry details
         GAR_LOCATION           = 'us-central1'
         GAR_REPOSITORY         = 'vulnerable-apps'
@@ -120,25 +126,23 @@ pipeline {
         stage('Build') {
             steps {
                 echo "Building local image: ${env.GAR_IMAGE_PATH}:${env.COMMIT_SHA}"
-               // sh "docker build -t ${env.GAR_IMAGE_PATH}:${env.COMMIT_SHA} ."
-               sh "docker build -t ${env.GAR_IMAGE_PATH}:latest ."
+                sh "docker build -t ${env.GAR_IMAGE_PATH}:${env.COMMIT_SHA} ."
             }
         }
 
         stage('Scan') {
             steps {
-                // Use the Jenkins "Credentials Binding" plugin to securely accesss
+                // Use the Jenkins "Credentials Binding" plugin to securely access
                 // the service account key we will create.
-                withCredentials([file(credentialsId: 'gcp-sa-key', variable: 'GCP_KEY_FILE')]) {
+                withCredentials([file(credentialsId: 'gcp-sa-key', variable: 'GGCP_KEY_FILE')]) {
                     
                     echo "Scanning image: ${env.GAR_IMAGE_PATH}:${env.COMMIT_SHA}"
                     
                     // Call our modular function
                     runCustomScan(
-                        keyFilePath: GCP_KEY_FILE,
+                        keyFilePath: GGCP_KEY_FILE,
                         imageName: env.GAR_IMAGE_PATH,
-                        //imageTag: env.COMMIT_SHA
-                        imageTag: 'latest'
+                        imageTag: env.COMMIT_SHA
                     )
                 }
             }
