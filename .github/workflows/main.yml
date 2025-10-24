@@ -54,7 +54,7 @@ jobs:
           
           # --- Behavior ---
           IGNORE_SERVER_ERRORS: 'false'
-          VERBOSITY: 'LOW'
+          VERBOSITY: 'HIGH'
 
       # 3. DOCKER PUSH
       # This step only runs if the scan passed.
