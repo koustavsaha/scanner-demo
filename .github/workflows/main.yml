@@ -32,7 +32,7 @@ jobs:
           echo "Building local image: $IMAGE_NAME:${{ github.sha }}"
           docker build -t $IMAGE_NAME:${{ github.sha }}  -t $IMAGE_NAME:latest .
 
-      # 2. VULNERABILITY SCAN (The Demo Step)
+      # 2. VULNERABILITY SCAN (The Demo Step)s
       # This step runs your scc artifactguardkaction.
       # It scans the local image AND authenticates to GCP for the next step.
       - name: Scan image with SCC artifactguard Scanner
