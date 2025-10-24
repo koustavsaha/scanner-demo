@@ -105,28 +105,22 @@ pipeline {
         
         // Derived variables, built from the ones above
         GAR_IMAGE_PATH         = "${GAR_LOCATION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${IMAGE_NAME}"
-        
-        // This will be set in the 'Checkout' stage
-        COMMIT_SHA             = '' 
     }
 
     stages {
         stage('Checkout') {
             steps {
                 // Check out the code
+                // This step automatically makes env.GIT_COMMIT available.
                 checkout scm
-                
-                // Get the full commit SHA
-                script {
-                    env.COMMIT_SHA = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
-                }
             }
         }
 
         stage('Build') {
             steps {
-                echo "Building local image: ${env.GAR_IMAGE_PATH}:${env.COMMIT_SHA}"
-                sh "docker build -t ${env.GAR_IMAGE_PATH}:${env.COMMIT_SHA} ."
+                // Use the built-in env.GIT_COMMIT variable
+                echo "Building local image: ${env.GAR_IMAGE_PATH}:${env.GIT_COMMIT}"
+                sh "docker build -t ${env.GAR_IMAGE_PATH}:${env.GIT_COMMIT} ."
             }
         }
 
@@ -136,13 +130,14 @@ pipeline {
                 // the service account key we will create.
                 withCredentials([file(credentialsId: 'gcp-sa-key', variable: 'GGCP_KEY_FILE')]) {
                     
-                    echo "Scanning image: ${env.GAR_IMAGE_PATH}:${env.COMMIT_SHA}"
+                    // Use the built-in env.GIT_COMMIT variable
+                    echo "Scanning image: ${env.GAR_IMAGE_PATH}:${env.GIT_COMMIT}"
                     
                     // Call our modular function
                     runCustomScan(
                         keyFilePath: GGCP_KEY_FILE,
                         imageName: env.GAR_IMAGE_PATH,
-                        imageTag: env.COMMIT_SHA
+                        imageTag: env.GIT_COMMIT
                     )
                 }
             }
@@ -161,10 +156,11 @@ pipeline {
                     sh "cat ${GCP_KEY_FILE} | docker login -u _json_key --password-stdin https://${env.GAR_LOCATION}-docker.pkg.dev"
                     
                     // 2. Push the commit-specific tag
-                    sh "docker push ${env.GAR_IMAGE_PATH}:${env.COMMIT_SHA}"
+                    // Use the built-in env.GIT_COMMIT variable
+                    sh "docker push ${env.GAR_IMAGE_PATH}:${env.GIT_COMMIT}"
                     
                     // 3. Tag and push the 'latest' tag
-                    sh "docker tag ${env.GAR_IMAGE_PATH}:${env.COMMIT_SHA} ${env.GAR_IMAGE_PATH}:latest"
+                    sh "docker tag ${env.GAR_IMAGE_PATH}:${env.GIT_COMMIT} ${env.GAR_IMAGE_PATH}:latest"
                     sh "docker push ${env.GAR_IMAGE_PATH}:latest"
                 }
             }
