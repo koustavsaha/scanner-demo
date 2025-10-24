@@ -88,12 +88,11 @@ pipeline {
     // Define all environment variables, similar to cloudbuild.yaml
     environment {
         GCP_PROJECT_ID         = 'cispoc'
-        IMAGE_NAME             = 'vulnerable-app'
+        IMAGE_NAME             = 'vulnerable-app-jenkins'
         ORGANIZATION_ID        = '714470867684'
         CONNECTOR_ID           = 'organizations/714470867684/locations/global/connectors/privatepreviewdemo'
-        SCANNER_IMAGE          = 'us-central1-docker.pkg.dev/ci-plugin/ci-images/scc-artifactguard-scan-image:latest'
+        SCANNER_IMAGE          = 'gcr.io/ci-plugin/updated-ci-scanning-multistage-build:latest'
         IGNORE_SERVER_ERRORS   = 'false'
-        
         // Set these to your specific Artifact Registry details
         GAR_LOCATION           = 'us-central1'
         GAR_REPOSITORY         = 'vulnerable-apps'
