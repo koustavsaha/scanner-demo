@@ -31,6 +31,7 @@ def runCustomScan(Map args) {
             // exits with a non-zero code.
             sh """
             docker run --rm \
+              -v /var/run/docker.sock:/var/run/docker.sock
               -v ${args.keyFilePath}:/gcp-creds.json \
               -v /var/run/docker.sock:/var/run/docker.sock \
               -e GOOGLE_APPLICATION_CREDENTIALS=/gcp-creds.json \
