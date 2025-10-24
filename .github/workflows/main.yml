@@ -34,7 +34,7 @@ jobs:
 
       # 2. VULNERABILITY SCAN (The Demo Step)s
       # This step runs your scc artifactguardkaction.
-      # It scans the local image AND authenticates to GCP for the next stepssss.
+      # It scans the local image AND authenticates to GCP for the next steps.
       - name: Scan image with SCC artifactguard Scanner
         uses: ./.github/actions/scc-artifactguard-scanner 
         with:
