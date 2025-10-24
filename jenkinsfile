@@ -120,7 +120,8 @@ pipeline {
         stage('Build') {
             steps {
                 echo "Building local image: ${env.GAR_IMAGE_PATH}:${env.COMMIT_SHA}"
-                sh "docker build -t ${env.GAR_IMAGE_PATH}:${env.COMMIT_SHA} ."
+               // sh "docker build -t ${env.GAR_IMAGE_PATH}:${env.COMMIT_SHA} ."
+               sh "docker build -t ${env.GAR_IMAGE_PATH}:latest ."
             }
         }
 
@@ -136,7 +137,8 @@ pipeline {
                     runCustomScan(
                         keyFilePath: GCP_KEY_FILE,
                         imageName: env.GAR_IMAGE_PATH,
-                        imageTag: env.COMMIT_SHA
+                        //imageTag: env.COMMIT_SHA
+                        imageTag: 'latest'
                     )
                 }
             }
