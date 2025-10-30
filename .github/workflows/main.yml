@@ -10,7 +10,7 @@ on:
 
 # Set environment variables for the entire workflow
 env:
-  IMAGE_NAME: vulnerable-app-demo12 # The local name for the image
+  IMAGE_NAME: vulnerable-app # The local name for the image
 
 jobs:
   build-scan-push:
